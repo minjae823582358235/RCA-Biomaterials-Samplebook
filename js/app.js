@@ -279,6 +279,13 @@
     flyer.getAnimations().forEach((a) => a.cancel());
   }
 
+  // every transition starts here: bump the token so stale async steps bail out,
+  // and clear the flyer an interrupted transition may have left in mid-air
+  function begin() {
+    hideFlyer();
+    return ++token;
+  }
+
   /* ─── Specimen slide ──────────────────────────────────────── */
 
   const stackedQuery = matchMedia('(max-width: 820px), (max-aspect-ratio: 6/5)');
@@ -386,7 +393,7 @@
   }
 
   async function enterDetail(it, from) {
-    const t = ++token;
+    const t = begin();
     view = 'detail';
     setView('detail');
     await present(it, t, from);
@@ -394,7 +401,7 @@
   }
 
   async function switchSpecimen(it) {
-    const t = ++token;
+    const t = begin();
     desc.classList.remove('is-shown');
     detail.classList.remove('is-in');
     if (current && current.film) {
@@ -410,7 +417,7 @@
   }
 
   async function leaveDetail() {
-    const t = ++token;
+    const t = begin();
     const it = current;
     view = 'library';
     desc.classList.remove('is-shown');
@@ -485,7 +492,7 @@
       if (view === 'detail') {
         leaveDetail();
       } else {
-        ++token;
+        begin();
         const fromCover = view === 'cover';
         view = 'library';
         setView('library');
@@ -494,8 +501,8 @@
       return;
     }
 
-    ++token;
-    if (view === 'detail') resetStage();
+    begin();
+    resetStage();
     view = 'cover';
     current = null;
     clearHover();
@@ -514,7 +521,7 @@
 
   $('replay').addEventListener('click', async () => {
     if (!current || !current.film) return;
-    const t = ++token;
+    const t = begin();
     desc.classList.remove('is-shown');
     await sinkArms();
     if (t !== token) return;
