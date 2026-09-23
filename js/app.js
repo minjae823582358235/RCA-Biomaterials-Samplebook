@@ -85,8 +85,6 @@
     });
   });
 
-  $('count').textContent = items.length;
-
   // strokes are drawn in user units, so keep them a constant screen width
   new ResizeObserver(() => {
     svg.style.setProperty('--u', (W / Math.max(plate.clientWidth, 1)).toFixed(3));
