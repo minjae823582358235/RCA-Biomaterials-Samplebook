@@ -31,7 +31,6 @@ window.MATERIALS = [
     name: 'Tomato',
     label: '',
     text: 'A near-black, matte tomato sheet with a tight, bark-like crinkle across its whole surface and a ragged lower edge.',
-    film: 'assets/films/tomato.webm',
   },
   {
     id: 'path55',

@@ -197,6 +197,11 @@
   }
 
   async function sinkArms() {
+    if (film.ended) {
+      // already faded out at the end of the film: just park the rig below the edge
+      rig.getAnimations().forEach((a) => a.cancel());
+      return;
+    }
     const from = getComputedStyle(rig).transform;
     rig.getAnimations().forEach((a) => a.cancel());
     const sink = rig.animate([
@@ -218,6 +223,11 @@
     const h = (w * c.h) / c.w;
     return { left: left + rw * 0.485 - w / 2, top: top + rh * 0.5 - h / 2, width: w, height: h };
   }
+
+  // never leave a film's last frame standing on the page (an export can end on an opaque frame)
+  film.addEventListener('ended', () => {
+    rig.animate([{ opacity: 1 }, { opacity: 0 }], { duration: T(350), easing: 'ease-out', fill: 'forwards' });
+  });
 
   /* ─── The flyer: carries a specimen between plate and slide ── */
 
