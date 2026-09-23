@@ -26,6 +26,14 @@
   const desc = $('desc');
   const flyer = $('flyer');
   const soundBtn = $('sound');
+  const cover = $('cover');
+  const setupFill = $('setup-fill');
+  const setupPct = $('setup-pct');
+  const filmLoader = $('film-loader');
+  const library = $('library');
+
+  // phones held upright get the plate turned a quarter so it fills the screen
+  const rotatedQuery = matchMedia('(max-width: 820px) and (max-aspect-ratio: 1/1)');
 
   let view = null;        // 'cover' | 'library' | 'detail'
   let current = null;     // specimen shown on the slide
@@ -36,6 +44,8 @@
   let hideTimer = 0;
   let hinted = false;
   let keyboardUser = false;
+  let settingUp = false;     // the cover is holding while the films download
+  let libraryReady = false;
   let soundOn = true;
   try { soundOn = localStorage.getItem('samplebook-sound') !== 'off'; } catch (e) { /* storage unavailable */ }
 
@@ -87,8 +97,10 @@
 
   // strokes are drawn in user units, so keep them a constant screen width
   new ResizeObserver(() => {
-    svg.style.setProperty('--u', (W / Math.max(plate.clientWidth, 1)).toFixed(3));
+    const across = rotatedQuery.matches ? plate.clientHeight : plate.clientWidth;
+    svg.style.setProperty('--u', (W / Math.max(across, 1)).toFixed(3));
   }).observe(plate);
+
 
   /* ─── Hover: lift the specimen off the plate ──────────────── */
 
@@ -104,7 +116,7 @@
     it.vis.classList.add('is-active');
     plate.classList.add('is-hovering');
     showTag(it);
-    if (it.film) prefetchFilm(it);
+    if (it.film && preload.parts.get(it.film) === 1) prefetchFilm(it);
   }
 
   function deactivate(it) {
@@ -151,28 +163,104 @@
     setTimeout(() => items.forEach((it) => it.vis.classList.remove('is-hint')), 2600);
   }
 
+  /* ─── Preloading ──────────────────────────────────────────── */
+
+  // phones get longer to fetch the films before the page moves on without them
+  const isMobile = () => matchMedia('(pointer: coarse)').matches || innerWidth <= 820;
+  const loadBudget = () => (isMobile() ? 10000 : 6000);
+
+  // Every film is downloaded into memory once, as soon as the page opens, so the arms can
+  // pop up the moment a specimen is clicked. Until a film has arrived it streams from its URL.
+  const filmBlobs = new Map();   // film path -> object URL
+  const preload = { parts: new Map(), films: new Map(), listeners: new Set(), promise: null };
+
+  function preloadProgress() {
+    const parts = [...preload.parts.values()];
+    return parts.length ? parts.reduce((sum, p) => sum + p, 0) / parts.length : 1;
+  }
+
+  function reportPreload(key, fraction) {
+    preload.parts.set(key, fraction);
+    const p = preloadProgress();
+    preload.listeners.forEach((fn) => fn(p));
+  }
+
+  async function fetchFilm(url) {
+    reportPreload(url, 0);
+    try {
+      const res = await fetch(url);
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      const total = Number(res.headers.get('content-length')) || 0;
+      const reader = res.body.getReader();
+      const chunks = [];
+      let loaded = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        loaded += value.length;
+        if (total) reportPreload(url, Math.min(loaded / total, 0.99));
+      }
+      filmBlobs.set(url, URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })));
+    } catch (e) {
+      // offline, or opened straight from disk: the film streams when it is opened instead
+    }
+    reportPreload(url, 1);
+  }
+
+  function startPreload() {
+    if (preload.promise) return preload.promise;
+    reportPreload('plate', 0);
+    const plateImg = new Image();
+    plateImg.src = window.PLATE.src;
+    const plateReady = plateImg.decode().catch(() => {}).then(() => reportPreload('plate', 1));
+    const urls = [...new Set(items.filter((it) => it.film).map((it) => it.film))];
+    urls.forEach((url) => preload.films.set(url, fetchFilm(url)));
+    preload.promise = Promise.all([plateReady, ...preload.films.values()]);
+    return preload.promise;
+  }
+
   /* ─── Film helpers ────────────────────────────────────────── */
 
+  const filmSrc = (it) => filmBlobs.get(it.film) || it.film;
+
   function prefetchFilm(it) {
-    if (film.dataset.src === it.film) return;
+    const src = filmSrc(it);
+    if (film.dataset.src === src) return;
     film.preload = 'auto';
-    film.src = it.film;
-    film.dataset.src = it.film;
+    film.src = src;
+    film.dataset.src = src;
   }
 
   function filmReady(it) {
     prefetchFilm(it);
-    if (film.readyState >= 3) return Promise.resolve();
+    if (film.readyState >= 4) return Promise.resolve();
     if (film.networkState === film.NETWORK_IDLE && film.readyState < 2) film.load();
     return new Promise((resolve) => {
       const done = () => {
-        film.removeEventListener('canplay', done);
+        film.removeEventListener('canplaythrough', done);
         film.removeEventListener('error', done);
         resolve();
       };
-      film.addEventListener('canplay', done);
+      film.addEventListener('canplaythrough', done);
       film.addEventListener('error', done);
     });
+  }
+
+  // wait (within the load budget) until the film can play through without stalling
+  async function waitForFilm(it) {
+    const deadline = wait(loadBudget());
+    const pending = preload.films.get(it.film);
+    if (pending && !filmBlobs.has(it.film)) await Promise.race([pending, deadline]);
+    await Promise.race([filmReady(it), deadline]);
+  }
+
+  // show the quiet 'Loading film' line only if the wait is noticeable
+  async function withLoader(promise, t) {
+    const timer = setTimeout(() => { if (t === token) filmLoader.classList.add('is-shown'); }, 250);
+    await promise;
+    clearTimeout(timer);
+    filmLoader.classList.remove('is-shown');
   }
 
   async function raiseArms() {
@@ -229,12 +317,24 @@
 
   /* ─── The flyer: carries a specimen between plate and slide ── */
 
+  // An element's box as the flyer sees it. On the turned plate a specimen lies on its side,
+  // so hand over the upright box with a quarter turn the flyer can unwind in flight.
+  function rectOf(node) {
+    const r = node.getBoundingClientRect();
+    if (node instanceof SVGElement && rotatedQuery.matches) {
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      return { left: cx - r.height / 2, top: cy - r.width / 2, width: r.height, height: r.width, rot: 90 };
+    }
+    return { left: r.left, top: r.top, width: r.width, height: r.height, rot: 0 };
+  }
+
   function placeFlyer(r) {
     flyer.style.left = `${r.left}px`;
     flyer.style.top = `${r.top}px`;
     flyer.style.width = `${r.width}px`;
     flyer.style.height = `${r.height}px`;
-    flyerRect = { left: r.left, top: r.top, width: r.width, height: r.height };
+    flyerRect = { left: r.left, top: r.top, width: r.width, height: r.height, rot: r.rot || 0 };
   }
 
   function launchFlyer(it, r) {
@@ -244,22 +344,25 @@
     flyer.classList.add('is-flying');
   }
 
+  // transforms are about the flyer's centre, so a quarter turn unwinds in place
   function flyTo(target, duration = 860) {
     const a = flyerRect;
     placeFlyer(target);
-    const dx = a.left - target.left;
-    const dy = a.top - target.top;
+    const dx = (a.left + a.width / 2) - (target.left + target.width / 2);
+    const dy = (a.top + a.height / 2) - (target.top + target.height / 2);
     const sx = a.width / target.width;
     const sy = a.height / target.height;
+    const ra = a.rot || 0;
+    const rt = target.rot || 0;
     const mid = (from, to) => from + (to - from) * 0.55;
     const anim = flyer.animate([
-      { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
+      { transform: `translate(${dx}px, ${dy}px) rotate(${ra}deg) scale(${sx}, ${sy})` },
       {
-        transform: `translate(${mid(dx, 0)}px, ${mid(dy, 0) - 26}px) scale(${mid(sx, 1) * 1.05}, ${mid(sy, 1) * 1.05})`,
+        transform: `translate(${mid(dx, 0)}px, ${mid(dy, 0) - 26}px) rotate(${mid(ra, rt)}deg) scale(${mid(sx, 1) * 1.05}, ${mid(sy, 1) * 1.05})`,
         offset: 0.5,
       },
-      { transform: 'none' },
-    ], { duration: T(duration), easing: 'cubic-bezier(.3,.7,.2,1)' });
+      { transform: `rotate(${rt}deg)` },
+    ], { duration: T(duration), easing: 'cubic-bezier(.3,.7,.2,1)', fill: 'forwards' });
     return settled(anim);
   }
 
@@ -281,6 +384,9 @@
   // and clear the flyer an interrupted transition may have left in mid-air
   function begin() {
     hideFlyer();
+    filmLoader.classList.remove('is-shown');
+    settingUp = false;
+    cover.classList.remove('is-setting-up');
     return ++token;
   }
 
@@ -361,17 +467,17 @@
     requestAnimationFrame(() => detail.classList.add('is-in'));
 
     if (it.film) {
-      const ready = filmReady(it);
+      const loading = waitForFilm(it); // runs during the flight
       if (from) {
         launchFlyer(it, from);
         await flyTo(heldRect(it), 820);
         if (t !== token) return;
-        await Promise.race([ready, wait(5000)]);
+        await withLoader(loading, t);
         if (t !== token) return;
         dropFlyer();
         await wait(T(140));
       } else {
-        await Promise.race([ready, wait(5000)]);
+        await withLoader(loading, t);
       }
       if (t !== token) return;
       await raiseArms();
@@ -423,14 +529,16 @@
     document.title = 'Biomaterial Samplebook';
     if (!it) { setView('library'); return; }
 
-    const home = it.cut.getBoundingClientRect();
+    // on a phone the plate can be scrolled: bring the specimen's spot back into view first
+    if (library.scrollHeight > library.clientHeight) it.cut.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    const home = rectOf(it.cut);
     if (it.film) {
       await sinkArms();
       if (t !== token) return;
       // hand the specimen back up from the bottom edge
       launchFlyer(it, { left: innerWidth / 2 - home.width, top: innerHeight + 30, width: home.width * 2, height: home.height * 2 });
     } else {
-      launchFlyer(it, stageImg.getBoundingClientRect());
+      launchFlyer(it, rectOf(stageImg));
       stageImg.classList.remove('is-shown', 'is-floating');
     }
     setView('library');
@@ -443,7 +551,7 @@
 
   function open(it) {
     if (view !== 'library') return;
-    pendingFlight = { it, rect: it.cut.getBoundingClientRect() };
+    pendingFlight = { it, rect: rectOf(it.cut) };
     go(`#/specimen/${pad(it.n)}`);
   }
 
@@ -451,6 +559,32 @@
     if (!current) return;
     const next = items[(current.n - 1 + dir + items.length) % items.length];
     go(`#/specimen/${pad(next.n)}`);
+  }
+
+  // First time through: the cover holds while the films download, then lifts onto the library
+  async function setUpLibrary(t) {
+    settingUp = true;
+    cover.classList.add('is-setting-up');
+    const show = (p) => {
+      setupFill.style.transform = `scaleX(${p})`;
+      setupPct.textContent = `${Math.round(p * 100)}%`;
+    };
+    show(preloadProgress());
+    preload.listeners.add(show);
+    const started = performance.now();
+    await Promise.race([startPreload(), wait(loadBudget())]);
+    const shown = performance.now() - started;
+    if (shown < 1200) await wait(T(1200 - shown)); // long enough to read as a step, not a flicker
+    preload.listeners.delete(show);
+    if (t !== token) return;
+    await wait(T(300));
+    if (t !== token) return;
+    settingUp = false;
+    libraryReady = true;
+    view = 'library';
+    setView('library');
+    setTimeout(hint, 750);
+    setTimeout(() => { if (view !== 'cover') cover.classList.remove('is-setting-up'); }, 1100);
   }
 
   /* ─── Views and routing ───────────────────────────────────── */
@@ -487,8 +621,11 @@
     }
 
     if (next.view === 'library') {
+      if (settingUp) return;
       if (view === 'detail') {
         leaveDetail();
+      } else if (view === 'cover' && !libraryReady) {
+        setUpLibrary(begin());
       } else {
         begin();
         const fromCover = view === 'cover';
@@ -567,5 +704,6 @@
     if (view === 'detail' && current && !current.film && stageImg.classList.contains('is-shown')) placeStage(current);
   });
 
+  startPreload();
   route();
 })();

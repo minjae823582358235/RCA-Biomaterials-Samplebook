@@ -19,17 +19,22 @@
           <span class="cover-line">Biomaterial</span>
           <span class="cover-line">Samplebook</span>
         </span>
-        <span class="cover-authors">Minjae Kim, Alice Han, Bruna Petreca, Kailash Ramraul, Ali Mohammed</span>
+        <span class="cover-authors">Minjae Kim, Alice Han, Bruna Petreca, Kailash Ramlaul, Ali Mohammed</span>
       </span>
       <span class="cover-hint">Open the samplebook <span aria-hidden="true">→</span></span>
     </button>
-    <img class="cover-logo" src="assets/rca-cmsc-logo.webp" alt="Royal College of Art — Centre for Materials Science &amp; Culture" width="1813" height="682">
+    <a class="cover-logo" href="https://www.rca.ac.uk/research-innovation/research-centres/centre-materials-science-culture/" target="_blank" rel="noopener"><img src="assets/rca-cmsc-logo.webp" alt="Royal College of Art — Centre for Materials Science &amp; Culture" width="1813" height="682"></a>
+    <div class="cover-setup" role="status" aria-live="polite">
+      <span class="setup-label">Setting up the library</span>
+      <span class="setup-pct" id="setup-pct">0%</span>
+      <span class="setup-track"><span class="setup-fill" id="setup-fill"></span></span>
+    </div>
   </section>
 
   <!-- ─── Library (the plate) ───────────────────────────────── -->
   <section class="view library" id="library" aria-label="Sample library">
     <header class="bar bar-library">
-      <img class="bar-logo" src="assets/rca-cmsc-logo.webp" alt="Royal College of Art — Centre for Materials Science &amp; Culture" width="1813" height="682">
+      <a class="bar-logo" href="https://www.rca.ac.uk/research-innovation/research-centres/centre-materials-science-culture/" target="_blank" rel="noopener"><img src="assets/rca-cmsc-logo.webp" alt="Royal College of Art — Centre for Materials Science &amp; Culture" width="1813" height="682"></a>
       <button class="bar-title" id="to-cover">Biomaterial Samplebook</button>
       <p class="bar-note"><em>hover to lift, click to open</em></p>
     </header>
@@ -59,6 +64,7 @@
         </div>
       </div>
       <figcaption class="plate-caption"><span class="caps">Plate I</span> <em>Samples from the BioImmersion internship, 2026</em></figcaption>
+      <p class="plate-hint">Tap a sample to open it</p>
     </figure>
   </section>
 
@@ -78,6 +84,11 @@
       <div class="film-rig" id="film-rig">
         <video class="film" id="film" playsinline preload="none"></video>
       </div>
+    </div>
+
+    <div class="film-loader" id="film-loader" role="status">
+      <span class="film-loader-label">Loading film</span>
+      <span class="film-loader-track"></span>
     </div>
 
     <div class="detail-copy">
