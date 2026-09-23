@@ -30,6 +30,7 @@
   const setupFill = $('setup-fill');
   const setupPct = $('setup-pct');
   const filmLoader = $('film-loader');
+  const loaderFill = $('film-loader-fill');
   const library = $('library');
 
   // phones held upright get the plate turned a quarter so it fills the screen
@@ -167,12 +168,20 @@
 
   // phones get longer to fetch the films before the page moves on without them
   const isMobile = () => matchMedia('(pointer: coarse)').matches || innerWidth <= 820;
-  const loadBudget = () => (isMobile() ? 10000 : 6000);
+  const setupBudget = () => (isMobile() ? 10000 : 6000);  // the cover waits this long for the films
+  const filmBudget = () => (isMobile() ? 20000 : 12000);  // a film slide waits this long for its film
+  const BUFFER_AHEAD = 8;                                  // seconds buffered ahead that count as 'good enough'
+
+  // phones get the lighter 720p cut of each film (assets/films/<name>-mobile.webm)
+  const mobileFilms = isMobile();
+  const filmUrl = (path) => (mobileFilms ? path.replace(/\.webm$/, '-mobile.webm') : path);
 
   // Every film is downloaded into memory once, as soon as the page opens, so the arms can
   // pop up the moment a specimen is clicked. Until a film has arrived it streams from its URL.
   const filmBlobs = new Map();   // film path -> object URL
-  const preload = { parts: new Map(), films: new Map(), listeners: new Set(), promise: null };
+  const preload = {
+    parts: new Map(), films: new Map(), aborts: new Map(), failed: new Set(), listeners: new Set(), promise: null,
+  };
 
   function preloadProgress() {
     const parts = [...preload.parts.values()];
@@ -187,8 +196,10 @@
 
   async function fetchFilm(url) {
     reportPreload(url, 0);
+    const abort = new AbortController();
+    preload.aborts.set(url, abort);
     try {
-      const res = await fetch(url);
+      const res = await fetch(filmUrl(url), { signal: abort.signal });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
       const total = Number(res.headers.get('content-length')) || 0;
       const reader = res.body.getReader();
@@ -204,6 +215,7 @@
       filmBlobs.set(url, URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })));
     } catch (e) {
       // offline, or opened straight from disk: the film streams when it is opened instead
+      preload.failed.add(url);
     }
     reportPreload(url, 1);
   }
@@ -222,7 +234,7 @@
 
   /* ─── Film helpers ────────────────────────────────────────── */
 
-  const filmSrc = (it) => filmBlobs.get(it.film) || it.film;
+  const filmSrc = (it) => filmBlobs.get(it.film) || filmUrl(it.film);
 
   function prefetchFilm(it) {
     const src = filmSrc(it);
@@ -232,34 +244,81 @@
     film.dataset.src = src;
   }
 
+  // seconds of film buffered from the playhead onwards
+  function aheadSeconds() {
+    let ahead = 0;
+    for (let i = 0; i < film.buffered.length; i++) {
+      if (film.buffered.start(i) <= film.currentTime + 0.25) {
+        ahead = Math.max(ahead, film.buffered.end(i) - film.currentTime);
+      }
+    }
+    return ahead;
+  }
+
+  const bufferTarget = () => Math.min(BUFFER_AHEAD, (film.duration || BUFFER_AHEAD) - film.currentTime);
+
+  // ready once the browser says it can play through, or enough is buffered ahead
+  const filmIsReady = () => film.readyState >= 4
+    || (film.readyState >= 3 && aheadSeconds() >= bufferTarget() - 0.05);
+
+  // 0…1 towards ready: the whole-file download while it is arriving, then the buffer ahead
+  function filmProgress(it) {
+    if (film.dataset.src === filmSrc(it) && film.duration > 0) {
+      return filmIsReady() ? 1 : Math.min(aheadSeconds() / bufferTarget(), 0.99);
+    }
+    if (preload.failed.has(it.film)) return 0;
+    return preload.parts.get(it.film) || 0;
+  }
+
   function filmReady(it) {
     prefetchFilm(it);
-    if (film.readyState >= 4) return Promise.resolve();
+    if (filmIsReady()) return Promise.resolve();
     if (film.networkState === film.NETWORK_IDLE && film.readyState < 2) film.load();
     return new Promise((resolve) => {
-      const done = () => {
-        film.removeEventListener('canplaythrough', done);
-        film.removeEventListener('error', done);
+      const events = ['canplaythrough', 'progress', 'canplay', 'error'];
+      const check = (e) => {
+        if (e.type !== 'error' && !filmIsReady()) return;
+        events.forEach((type) => film.removeEventListener(type, check));
         resolve();
       };
-      film.addEventListener('canplaythrough', done);
-      film.addEventListener('error', done);
+      events.forEach((type) => film.addEventListener(type, check));
     });
   }
 
-  // wait (within the load budget) until the film can play through without stalling
+  // wait (within the film budget) until the film is ready to play without stalling
   async function waitForFilm(it) {
-    const deadline = wait(loadBudget());
+    const deadline = wait(filmBudget());
     const pending = preload.films.get(it.film);
-    if (pending && !filmBlobs.has(it.film)) await Promise.race([pending, deadline]);
+    if (pending && !filmBlobs.has(it.film) && !preload.failed.has(it.film)) {
+      // nearly downloaded: let it finish; otherwise streaming a few seconds ahead is quicker
+      if ((preload.parts.get(it.film) || 0) >= 0.6) await Promise.race([pending, deadline]);
+      else preload.aborts.get(it.film).abort();
+    }
     await Promise.race([filmReady(it), deadline]);
   }
 
-  // show the quiet 'Loading film' line only if the wait is noticeable
-  async function withLoader(promise, t) {
-    const timer = setTimeout(() => { if (t === token) filmLoader.classList.add('is-shown'); }, 250);
+  // 'Getting some helping hands…' appears if the wait is noticeable; its line follows the
+  // film's real progress and runs to the end before the hands come up
+  async function withLoader(promise, t, it) {
+    const paint = () => { loaderFill.style.transform = `scaleX(${filmProgress(it).toFixed(3)})`; };
+    loaderFill.style.transition = 'none';
+    paint();
+    loaderFill.getBoundingClientRect();
+    loaderFill.style.transition = '';
+    const poll = setInterval(paint, 150);
+    let shown = false;
+    const timer = setTimeout(() => {
+      if (t !== token) return;
+      shown = true;
+      filmLoader.classList.add('is-shown');
+    }, 250);
     await promise;
+    clearInterval(poll);
     clearTimeout(timer);
+    if (shown && t === token) {
+      loaderFill.style.transform = 'scaleX(1)';
+      await wait(T(420));
+    }
     filmLoader.classList.remove('is-shown');
   }
 
@@ -472,12 +531,12 @@
         launchFlyer(it, from);
         await flyTo(heldRect(it), 820);
         if (t !== token) return;
-        await withLoader(loading, t);
+        await withLoader(loading, t, it);
         if (t !== token) return;
         dropFlyer();
         await wait(T(140));
       } else {
-        await withLoader(loading, t);
+        await withLoader(loading, t, it);
       }
       if (t !== token) return;
       await raiseArms();
@@ -572,7 +631,7 @@
     show(preloadProgress());
     preload.listeners.add(show);
     const started = performance.now();
-    await Promise.race([startPreload(), wait(loadBudget())]);
+    await Promise.race([startPreload(), wait(setupBudget())]);
     const shown = performance.now() - started;
     if (shown < 1200) await wait(T(1200 - shown)); // long enough to read as a step, not a flicker
     preload.listeners.delete(show);

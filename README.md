@@ -17,10 +17,18 @@ The films are transparent VP9 WebM, which Safari does not play. Use Chrome, Edge
 | Films (transparent `.webm`) | `assets/films/` |
 | Colours, type sizes, layout | `css/style.css` |
 
+After changing any CSS or JS file, bump the `?v=` number on the `<link>` and `<script>` tags in `index.html` (e.g. `?v=2` → `?v=3`). GitHub Pages lets browsers cache files for 10 minutes, and without the bump a visitor can get the new page with an old stylesheet.
+
 `assets/films/*.webm` are copies of `roughtomato.webm` / `roughscoby.webm` with the faint alpha noise zeroed. To clean a new film the same way:
 
 ```bash
 ffmpeg -c:v libvpx-vp9 -i input.webm -vf "format=yuva420p,lutyuv=a='if(lt(val\,18)\,0\,val)'" -c:v libvpx-vp9 -pix_fmt yuva420p -crf 28 -b:v 0 -row-mt 1 -auto-alt-ref 0 -c:a copy assets/films/output.webm
+```
+
+Phones play a lighter 720p cut of each film, `<name>-mobile.webm`, next to the full one. Every film listed in `js/materials.js` needs one:
+
+```bash
+ffmpeg -c:v libvpx-vp9 -i assets/films/output.webm -vf "scale=1280:720:flags=lanczos,format=yuva420p,lutyuv=a='if(lt(val\,18)\,0\,val)'" -c:v libvpx-vp9 -pix_fmt yuva420p -crf 34 -b:v 0 -row-mt 1 -auto-alt-ref 0 -c:a libopus -b:a 64k assets/films/output-mobile.webm
 ```
 
 ## Rebuild generated files

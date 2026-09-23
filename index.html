@@ -6,8 +6,8 @@
   <title>Biomaterial Samplebook</title>
   <meta name="description" content="An interactive samplebook of biomaterials: hover a specimen to lift it from the plate, click to open it.">
   <link rel="preload" href="assets/plate.jpg" as="image">
-  <link rel="stylesheet" href="css/fonts.css">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/fonts.css?v=3">
+  <link rel="stylesheet" href="css/style.css?v=3">
 </head>
 <body data-view="cover">
 
@@ -87,8 +87,8 @@
     </div>
 
     <div class="film-loader" id="film-loader" role="status">
-      <span class="film-loader-label">Loading film</span>
-      <span class="film-loader-track"></span>
+      <span class="film-loader-label">Getting some helping hands<span class="dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
+      <span class="film-loader-track"><span class="film-loader-fill" id="film-loader-fill"></span></span>
     </div>
 
     <div class="detail-copy">
@@ -112,8 +112,8 @@
   <!-- the specimen that flies between the plate and the slide -->
   <img class="flyer" id="flyer" alt="" aria-hidden="true">
 
-  <script src="js/shapes.js"></script>
-  <script src="js/materials.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/shapes.js?v=3"></script>
+  <script src="js/materials.js?v=3"></script>
+  <script src="js/app.js?v=3"></script>
 </body>
 </html>

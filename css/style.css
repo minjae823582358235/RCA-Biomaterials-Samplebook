@@ -613,25 +613,28 @@ body[data-view="detail"] .library { transition-duration: 0.45s; }
   transition: opacity 0.35s ease, transform 0.5s var(--ease-out), visibility 0s;
 }
 .film-loader-track {
-  position: relative;
-  width: 120px;
+  width: 160px;
   height: 1px;
   background: var(--rule);
   overflow: hidden;
 }
-.film-loader-track::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 40%;
+/* fills with the film's real progress: download, or buffer ahead when streaming */
+.film-loader-fill {
+  display: block;
+  height: 100%;
   background: var(--ink);
-  animation: loader-slide 1.4s ease-in-out infinite;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s var(--ease-out);
 }
-@keyframes loader-slide {
-  from { left: -40%; }
-  to { left: 100%; }
-}
+/* the dots arrive one by one, then start again */
+.dots span { animation: 1.6s step-end infinite; }
+.dots span:nth-child(1) { animation-name: dot-1; }
+.dots span:nth-child(2) { animation-name: dot-2; }
+.dots span:nth-child(3) { animation-name: dot-3; }
+@keyframes dot-1 { 0% { opacity: 0; } 25% { opacity: 1; } }
+@keyframes dot-2 { 0% { opacity: 0; } 50% { opacity: 1; } }
+@keyframes dot-3 { 0% { opacity: 0; } 75% { opacity: 1; } }
 
 /* The specimen that flies between the plate and the slide */
 .flyer {
@@ -720,6 +723,7 @@ body[data-view="detail"] .library { transition-duration: 0.45s; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     transition-delay: 0s !important;
   }
