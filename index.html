@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Biomaterial Samplebook</title>
+  <meta name="description" content="An interactive samplebook of biomaterials: hover a specimen to lift it from the plate, click to open it.">
+  <link rel="preload" href="assets/plate.jpg" as="image">
+  <link rel="stylesheet" href="css/fonts.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-view="cover">
+
+  <!-- ─── Cover ─────────────────────────────────────────────── -->
+  <section class="view cover" id="cover" aria-label="Cover">
+    <button class="cover-hit" id="cover-open" aria-label="Open the samplebook">
+      <span class="cover-block">
+        <span class="cover-title">
+          <span class="cover-line">Biomaterial</span>
+          <span class="cover-line">Samplebook</span>
+        </span>
+        <span class="cover-authors">Minjae Kim, Alice Han, Bruna Petreca, Kailash Ramraul, Ali Mohammed</span>
+      </span>
+      <span class="cover-hint">Open the samplebook <span aria-hidden="true">→</span></span>
+    </button>
+  </section>
+
+  <!-- ─── Library (the plate) ───────────────────────────────── -->
+  <section class="view library" id="library" aria-label="Sample library">
+    <header class="bar">
+      <button class="bar-title" id="to-cover">Biomaterial Samplebook</button>
+      <p class="bar-note"><span id="count"></span> specimens <span class="dot">·</span> <em>hover to lift, click to open</em></p>
+    </header>
+
+    <figure class="plate-frame">
+      <div class="plate" id="plate">
+        <svg id="plate-svg" viewBox="0 0 5043 3463" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Photograph of the biomaterial samples">
+          <defs>
+            <filter id="lift-shadow" x="-30%" y="-30%" width="160%" height="170%" color-interpolation-filters="sRGB">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="26" result="b1"/>
+              <feOffset in="b1" dx="10" dy="34" result="o1"/>
+              <feComponentTransfer in="o1" result="s1"><feFuncA type="linear" slope="0.38"/></feComponentTransfer>
+              <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b2"/>
+              <feOffset in="b2" dx="2" dy="8" result="o2"/>
+              <feComponentTransfer in="o2" result="s2"><feFuncA type="linear" slope="0.28"/></feComponentTransfer>
+              <feMerge><feMergeNode in="s1"/><feMergeNode in="s2"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <image id="plate-img" href="assets/plate.jpg" x="0" y="0" width="5043" height="3463"/>
+          <rect class="veil" x="0" y="0" width="5043" height="3463"/>
+          <g id="specimens"></g>
+        </svg>
+        <div class="tag" id="tag" aria-hidden="true">
+          <span class="tag-no" id="tag-no"></span>
+          <span class="tag-name" id="tag-name"></span>
+          <span class="tag-film" id="tag-film">▶ film</span>
+        </div>
+      </div>
+      <figcaption class="plate-caption"><span class="caps">Plate I</span> <em>Samples from the BioImmersion internship, 2026</em></figcaption>
+    </figure>
+  </section>
+
+  <!-- ─── Specimen slide ────────────────────────────────────── -->
+  <section class="view detail" id="detail" aria-label="Specimen" aria-live="polite">
+    <header class="bar">
+      <button class="bar-back" id="back"><span aria-hidden="true">←</span> Library</button>
+      <nav class="bar-nav" aria-label="Specimens">
+        <button class="nav-btn" id="prev" aria-label="Previous specimen">‹</button>
+        <span class="nav-count" id="nav-count"></span>
+        <button class="nav-btn" id="next" aria-label="Next specimen">›</button>
+      </nav>
+    </header>
+
+    <div class="stage" id="stage">
+      <img class="stage-specimen" id="stage-specimen" alt="">
+      <div class="film-rig" id="film-rig">
+        <video class="film" id="film" playsinline preload="none"></video>
+      </div>
+    </div>
+
+    <div class="detail-copy">
+      <div class="detail-head" id="detail-head">
+        <p class="detail-no" id="detail-no"></p>
+        <h1 class="detail-name" id="detail-name"></h1>
+      </div>
+
+      <aside class="desc" id="desc">
+        <p class="desc-kicker">Description</p>
+        <p class="desc-text" id="desc-text"></p>
+        <dl class="desc-meta" id="desc-meta"></dl>
+        <div class="desc-controls" id="desc-controls">
+          <button class="ctl" id="replay">Replay film</button>
+          <button class="ctl" id="sound" aria-pressed="true">Sound on</button>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- the specimen that flies between the plate and the slide -->
+  <img class="flyer" id="flyer" alt="" aria-hidden="true">
+
+  <script src="js/shapes.js"></script>
+  <script src="js/materials.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
